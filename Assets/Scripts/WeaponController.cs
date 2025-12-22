@@ -7,6 +7,7 @@ public class WeaponController : MonoBehaviour
     public Camera fpsCamera;
     public PlayerController playerController;
     public GameObject impactPrefab;
+    public GameObject sparkPrefab;
     public GameObject trailPrefab;
     public Transform firePoint;
 
@@ -79,7 +80,9 @@ public class WeaponController : MonoBehaviour
             CreateTrail(hit.point);
             GameObject impact = Instantiate(impactPrefab, hit.point, Quaternion.LookRotation(hit.normal));
             Destroy(impact, 1f);
-
+            // Merminin çarptığı yeri ve yönü alarak kıvılcımı oluştur
+            GameObject spark = Instantiate(sparkPrefab, hit.point, Quaternion.LookRotation(hit.normal));
+            Destroy(spark, 0.5f); // Yarım saniye sonra dünyadan sil
             EnemyHealth enemy = hit.collider.GetComponent<EnemyHealth>();
             if (enemy != null)
             {
