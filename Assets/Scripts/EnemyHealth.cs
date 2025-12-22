@@ -12,16 +12,24 @@ public class EnemyHealth : MonoBehaviour
         currentHealth = maxHealth;
     }
 
-    public void TakeDamage(float damage)
-    {
-        currentHealth -= damage;
-        Debug.Log("Enemy HP: " + currentHealth);
+    // EnemyHealth.cs içinde
+public void TakeDamage(float damage)
+{
+    currentHealth -= damage;
+    EnemyAI ai = GetComponent<EnemyAI>();
 
-        if (currentHealth <= 0f)
+    if (ai != null)
+    {
+        // Senaryo 1: Beklemediği anda hasar alırsa (Pusu)
+        // Senaryo 2: Canı belli bir limitin altına düşerse
+        if (currentHealth < maxHealth * 0.3f || ai.GetCurrentState() != "Chase")
         {
-            Die();
+            ai.FindBestCover();
         }
     }
+
+    if (currentHealth <= 0f) Die();
+}
 
     void Die()
     {
