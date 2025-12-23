@@ -9,10 +9,17 @@ public class EnemyHealth : MonoBehaviour
     private UnityEngine.AI.NavMeshAgent agent; // NavMesh'i kontrol edecek değişken
     public Renderer[] enemyRenderers; // Robotun tüm dış parçalarını buraya atacağız
     float currentHealth;
+    public float GetCurrentHealth()
+{
+    return currentHealth;
+}
 
     void Start()
     {
         currentHealth = maxHealth;
+        // Bileşenleri en başta önbelleğe alalım
+        agent = GetComponent<UnityEngine.AI.NavMeshAgent>();
+        anim = GetComponentInChildren<Animator>();
     }
 
     // EnemyHealth.cs içinde

@@ -4,6 +4,8 @@ using System.Collections;
 
 public class EnemyAI : MonoBehaviour
 {
+    int currentStrafeValue = 0;
+    public string GetCurrentState() { return currentState.ToString(); }
     public GameObject trailPrefab;
     public Transform enemyFirePoint;
     [Header("References")]
@@ -29,6 +31,10 @@ public class EnemyAI : MonoBehaviour
     [Header("Combat")]
     public float attackRange = 10f;
     public float damage = 10f;
+    [Header("Ammo")]
+    public int enemyCurrentAmmo = 30;
+    public int enemyMagSize = 30;
+    bool isReloading = false;
     [Header("Movement Tweaks")]
     public float strafeSpeed = 3f;
     float strafeTimer;
@@ -112,7 +118,7 @@ public class EnemyAI : MonoBehaviour
                 break;
         }
     }
-    public string GetCurrentState() { return currentState.ToString(); }
+    
     public void OnDamagedByPlayer()
     {
     // Eğer seni görmüyorsa bile ateş ettiğin yöne dönsün ve seni kovalamaya başlasın
@@ -163,43 +169,74 @@ IEnumerator PatrolWait()
 }
 
     void HandleChase()
+{
+    // --- STRAFE (ZİKZAK) ZAMANLAYICI KONTROLÜ ---
+    strafeTimer -= Time.deltaTime;
+    if (strafeTimer <= 0)
     {
-                // --- GRUP HABERLEŞMESİ ---
-            // Her karede değil, sadece kovalama moduna ilk girdiğinde veya belirli aralıklarla yapabiliriz
-            // Şimdilik en basit haliyle: etraftaki dostları bul ve uyar
-            float alertRadius = 15f; 
-            Collider[] friends = Physics.OverlapSphere(transform.position, alertRadius);
-            foreach (var f in friends)
-            {
-                EnemyAI friendAI = f.GetComponent<EnemyAI>();
-                // Kendisi hariç diğer AI'ları uyar
-                if (friendAI != null && friendAI != this)
-                {
-                    friendAI.AlertFromFriend(player.position);
-                }
-            }
-        agent.SetDestination(player.position);
+        // currentStrafeValue sınıfın başında tanımladığımız değişken (-1, 0, 1)
+        currentStrafeValue = Random.Range(-1, 2); 
+        
+        // Rastgele bir süre boyunca (1.5 - 3 sn) seçilen yöne kayacak
+        strafeTimer = Random.Range(1.5f, 3.0f); 
+        
+        // Yön hesaplama: Sağ, Sol veya Düz
+        if (currentStrafeValue != 0) 
+            strafeDirection = (currentStrafeValue == -1) ? -transform.right : transform.right;
+        else
+            strafeDirection = Vector3.zero;
+    }
 
-        float distance = Vector3.Distance(transform.position, player.position);
+    // Animator Blend Tree parametresini güncelle (StrafeDirection parametresi)
+    if (anim != null) 
+    {
+        anim.SetFloat("StrafeDirection", currentStrafeValue);
+    }
 
-        if (CanSeePlayer())
+    // --- GRUP HABERLEŞMESİ (Alarm Sistemi) ---
+    float alertRadius = 15f; 
+    Collider[] friends = Physics.OverlapSphere(transform.position, alertRadius);
+    foreach (var f in friends)
+    {
+        EnemyAI friendAI = f.GetComponent<EnemyAI>();
+        if (friendAI != null && friendAI != this)
         {
-            lastSeenPosition = player.position;
+            friendAI.AlertFromFriend(player.position);
+        }
+    }
 
-            if (distance <= attackRange)
-            {
-               agent.SetDestination(transform.position + strafeDirection); // Rastgele yöne git
-            TryShoot();
-            }
+    // --- HAREKET VE SALDIRI MANTIĞI ---
+    float distance = Vector3.Distance(transform.position, player.position);
+
+    if (CanSeePlayer())
+    {
+        lastSeenPosition = player.position;
+
+        if (distance <= attackRange)
+        {
+            // Oyuncuya çok yakınsa zikzak yaparak (Strafe) hareket et
+            agent.SetDestination(transform.position + strafeDirection * 2f);
+            
+            // Oyuncuya bakmasını sağla (NavMesh bazen yan dönebilir strafe yaparken)
+            Vector3 lookPos = player.position - transform.position;
+            lookPos.y = 0;
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookPos), Time.deltaTime * 5f);
+            
+            TryShoot(); // Ateş et
         }
         else
         {
-            // Direkt Search yerine önce Baskı Ateşi
-            suppressiveTimer = suppressiveFireDuration;
-            currentState = EnemyState.SuppressiveFire;
-           
+            // Menzil dışındaysa doğrudan oyuncuya koş
+            agent.SetDestination(player.position);
         }
     }
+    else
+    {
+        // Oyuncu görüşten çıktıysa Baskı Ateşi moduna geç
+        suppressiveTimer = suppressiveFireDuration;
+        currentState = EnemyState.SuppressiveFire;
+    }
+}
     void HandleSuppressiveFire()
 {
     // Eğer oyuncu bu sırada tekrar açığa çıkarsa kovalamaya geri dön
@@ -257,44 +294,102 @@ IEnumerator PatrolWait()
 
     // 4. Siper Mantığı Fonksiyonu
     void HandleTakeCover()
+{
+    if (!agent.pathPending && agent.remainingDistance < 0.5f)
     {
-        // Sipere ulaştık mı kontrol et
-        if (!agent.pathPending && agent.remainingDistance < 0.5f)
+        // Sipere vardığında oyuncuya bak
+        Vector3 direction = (player.position - transform.position).normalized;
+        direction.y = 0; 
+        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(direction), Time.deltaTime * 5f);
+
+        // Siperdeyken de ateş etmeye çalış!
+        if (CanSeePlayer())
         {
-          isTakingCover = false;
-          // Sipere vardık, 2 saniye bekle sonra oyuncuyu tekrar kovala (veya ateş et)
-         StartCoroutine(WaitInCover());
+            TryShoot();
+        }
+        
+        if (!isTakingCover) // Coroutine'in birden fazla kez başlamasını engelle
+        {
+            isTakingCover = true;
+            StartCoroutine(WaitInCover());
         }
     }
+}
 
     IEnumerator WaitInCover()
     {
-        yield return new WaitForSeconds(2f);
+    // 1. Sipere varınca eğil
+    if (anim != null) anim.SetBool("IsCrouching", true);
+    
+    // Siperde 2 ile 4 saniye arası rastgele bir süre bekle
+    yield return new WaitForSeconds(Random.Range(2f, 4f));
+
+    // 2. Dikizleme Modu: Ayağa kalk ve ateş et
+    if (anim != null) anim.SetBool("IsCrouching", false);
+    
+    // Ayağa kalkması için kısa bir süre tanı
+    yield return new WaitForSeconds(0.5f);
+
+    // 3 mermi atacak kadar bekle (TryShoot zaten Burst çalıştığı için mermi yağdıracaktır)
+    if (CanSeePlayer())
+    {
+        TryShoot();
+    }
+    
+    yield return new WaitForSeconds(1.5f);
+
+    // 3. Tekrar siper al mı yoksa kovalamaya devam mı?
+    // Canı hala çok düşükse siperde kalmaya devam etsin
+    if (GetComponent<EnemyHealth>().GetCurrentHealth() < 30f)
+    {
+        StartCoroutine(WaitInCover()); // Döngüye girer, tekrar eğilir
+    }
+    else
+    {
+        isTakingCover = false;
         currentState = EnemyState.Chase;
+    }
     }
     // 5. EN ÖNEMLİSİ: En İyi Siperi Bulma
     public void FindBestCover()
+{
+    GameObject[] covers = GameObject.FindGameObjectsWithTag("Cover");
+    Transform bestCover = null;
+    float closestDistance = Mathf.Infinity;
+
+    foreach (GameObject cover in covers)
     {
-        GameObject[] covers = GameObject.FindGameObjectsWithTag("Cover");
-        Transform bestCover = null;
-        float closestDistance = Mathf.Infinity;
-    
-        foreach (GameObject cover in covers)
+        // 1. Mesafe kontrolü
+        float dist = Vector3.Distance(transform.position, cover.transform.position);
+        
+        // 2. Görüş Kontrolü (Line of Sight)
+        // Oyuncu ile siper noktası arasında bir engel var mı?
+        Vector3 directionToPlayer = (player.position - cover.transform.position).normalized;
+        float distanceToPlayer = Vector3.Distance(cover.transform.position, player.position);
+
+        // Siperden oyuncuya doğru bir ışın yolluyoruz
+        // Eğer bu ışın bir şeye çarpıyorsa (obstacleLayer), oyuncu orayı göremiyor demektir -> İYİ SİPER!
+        if (Physics.Raycast(cover.transform.position + Vector3.up, directionToPlayer, distanceToPlayer, obstacleLayer))
         {
-            float dist = Vector3.Distance(transform.position, cover.transform.position);
             if (dist < closestDistance)
             {
-                // Basitçe en yakını seçiyoruz (Şimdilik)
                 closestDistance = dist;
                 bestCover = cover.transform;
             }
         }
-    
-        if (bestCover != null)
-        {
-            currentState = EnemyState.TakeCover;
-            agent.SetDestination(bestCover.position);
-        }
+    }
+
+    if (bestCover != null)
+    {
+        currentState = EnemyState.TakeCover;
+        agent.SetDestination(bestCover.position);
+        Debug.Log("Güvenli siper bulundu: " + bestCover.name);
+    }
+    else
+    {
+        // Güvenli siper yoksa kaçmaya devam et veya en yakına razı ol
+        Debug.Log("Güvenli siper bulunamadı, rastgele kaçış!");
+    }
     }
     // ===================== COMBAT =====================
 
@@ -360,12 +455,35 @@ IEnumerator BurstFireAtPosition(int shots, Vector3 targetPos)
         lr.SetPosition(1, targetPos);
         Destroy(trail, 0.05f);
     }
+    IEnumerator EnemyReload()
+    {
+        isReloading = true;
+        if (anim != null) anim.SetTrigger("Reload");
+        
+        Debug.Log("Şarjör bitti, siper aranıyor!");
+        FindBestCover(); // Reload yaparken kaç
+
+        yield return new WaitForSeconds(2.5f);
+        enemyCurrentAmmo = enemyMagSize;
+        isReloading = false;
+        currentState = EnemyState.Chase;
+    }
     void FireSingleShot(Vector3 targetPosition)
 {   // Animator bileşenine ulaşıp "Shoot" tetikleyicisini çalıştırıyoruz
     if (anim != null) 
     {
         anim.SetTrigger("Shoot"); 
     }
+    if (isReloading) return;
+
+    enemyCurrentAmmo--;
+    
+    if (enemyCurrentAmmo <= 0)
+    {
+        StartCoroutine(EnemyReload());
+        return;
+    }
+   
     Vector3 shootDir = (targetPosition - enemyFirePoint.position).normalized;
     shootDir += Random.insideUnitSphere * maxSpread * (1f - accuracy);
     
