@@ -4,10 +4,19 @@ public class PlayerController : MonoBehaviour
 {
     [Header("Movement")]
     public float moveSpeed = 5f;
+    public float jumpHeight = 1.5f;
 
     [Header("Mouse Look")]
     public float mouseSensitivity = 150f;
     public Transform cameraPivot;
+
+    [Header("Gravity")]
+    public float gravity = -9.81f;
+    public Transform groundCheck;
+    public float groundDistance = 0.4f;
+    public LayerMask groundMask;
+    bool isgrounded;
+    private Vector3 velocity;
 
     float xRotation = 0f;
     float recoil = 0f;
@@ -25,6 +34,7 @@ public class PlayerController : MonoBehaviour
     {
         Move();
         Look();
+        Jump();
     }
      public void AddRecoil(float amount)
     {
@@ -32,11 +42,22 @@ public class PlayerController : MonoBehaviour
     }
     void Move()
     {
+        //Yerçekimi kısmı
+        isgrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask); //yere temas edip etmeme kontrolü
+        if (isgrounded && velocity.y < 0) //yerle temas halindeyse ve aşağı doğru hız varsa
+        {
+            velocity.y = -2f; //küçük bir negatif değer veriyoruz ki yere yapışsın
+        }
+        
+        
+
         float x = Input.GetAxis("Horizontal");
         float z = Input.GetAxis("Vertical");
 
         Vector3 move = transform.right * x + transform.forward * z;
         controller.Move(move * moveSpeed * Time.deltaTime);
+        velocity.y += gravity * Time.deltaTime; //yerçekimi etkisi
+        controller.Move(velocity * Time.deltaTime); //yerçekimi hareketi
     }
 
     void Look()
@@ -50,5 +71,15 @@ public class PlayerController : MonoBehaviour
         recoil = Mathf.Lerp(recoil, 0f, 10f * Time.deltaTime);
         cameraPivot.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
         transform.Rotate(Vector3.up * mouseX);
+        
+    }
+
+    void Jump()
+    {
+        if (isgrounded && Input.GetButtonDown("Jump"))
+        {
+            velocity.y = Mathf.Sqrt(2f * -gravity * jumpHeight); //1.5f zıplama yüksekliği
+            print("Jumped");
+        }
     }
 }
