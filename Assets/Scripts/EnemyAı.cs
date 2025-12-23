@@ -18,6 +18,7 @@ public class EnemyAI : MonoBehaviour
 
     float searchTimer;
     float nextFireTime;
+    private Animator anim;
 
     bool isBursting;
 
@@ -75,10 +76,17 @@ public class EnemyAI : MonoBehaviour
         agent = GetComponent<NavMeshAgent>();
         startPosition = transform.position;
         currentState = EnemyState.Idle;
+        // Robot, scriptin olduğu objenin alt objesi olduğu için GetComponentInChildren kullanıyoruz
+        anim = GetComponentInChildren<Animator>();
     }
 
     void Update()
-    {
+    {   if (anim != null){
+        // Ajanın o anki hızını al (0 duruyor, 3.5 koşuyor gibi)
+        float currentSpeed = agent.velocity.magnitude;
+        // Bu hızı animatördeki "Speed" parametresine gönder
+        anim.SetFloat("Speed", currentSpeed);
+        }
         switch (currentState)
         {
             case EnemyState.Idle:
@@ -353,7 +361,11 @@ IEnumerator BurstFireAtPosition(int shots, Vector3 targetPos)
         Destroy(trail, 0.05f);
     }
     void FireSingleShot(Vector3 targetPosition)
-{
+{   // Animator bileşenine ulaşıp "Shoot" tetikleyicisini çalıştırıyoruz
+    if (anim != null) 
+    {
+        anim.SetTrigger("Shoot"); 
+    }
     Vector3 shootDir = (targetPosition - enemyFirePoint.position).normalized;
     shootDir += Random.insideUnitSphere * maxSpread * (1f - accuracy);
     
