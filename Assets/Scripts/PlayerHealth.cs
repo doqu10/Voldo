@@ -10,11 +10,22 @@ public class PlayerHealth : MonoBehaviour
     public float shakeDuration = 0.15f; // Ne kadar sürsün?
     public float shakeMagnitude = 0.2f; // Ne kadar şiddetli olsun?
     private Vector3 initialCenterPos;
+
+    [Header("Stamina Settings")]
+    public float maxStamina = 100f;
+    private float currentStamina;
+    public float staminaRegenRate = 5f; // Stamina yenilenme h
+    public float CurrentStamina
+    {
+        get { return currentStamina; }
+        set { currentStamina = Mathf.Clamp(value, 0, maxStamina); }
+    }
     void Start()
     {
         currentHealth = maxHealth;
         if(cameraTransform != null) 
         initialCenterPos = cameraTransform.localPosition;
+        currentStamina = maxStamina/5; // Başlangıçta biraz stamina ile başla
     }
 
     public void TakeDamage(float amount)

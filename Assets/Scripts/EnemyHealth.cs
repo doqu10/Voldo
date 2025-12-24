@@ -10,9 +10,12 @@ public class EnemyHealth : MonoBehaviour
     public Renderer[] enemyRenderers; // Robotun tüm dış parçalarını buraya atacağız
     float currentHealth;
     public float GetCurrentHealth()
-{
-    return currentHealth;
-}
+    {
+        return currentHealth;
+    }
+    
+    
+
 
     void Start()
     {
@@ -20,6 +23,8 @@ public class EnemyHealth : MonoBehaviour
         // Bileşenleri en başta önbelleğe alalım
         agent = GetComponent<UnityEngine.AI.NavMeshAgent>();
         anim = GetComponentInChildren<Animator>();
+
+        
     }
 
     // EnemyHealth.cs içinde

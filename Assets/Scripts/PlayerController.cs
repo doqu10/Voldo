@@ -31,10 +31,12 @@ public class PlayerController : MonoBehaviour
     float xRotation = 0f;
     float recoil = 0f;
     CharacterController controller;
+    PlayerHealth playerHealth;
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
+        playerHealth = GetComponent<PlayerHealth>();
         currentSpeed = moveSpeed;
         defaultYPos = cameraPivot.localPosition.y;
 
