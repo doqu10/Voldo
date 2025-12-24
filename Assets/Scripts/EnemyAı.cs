@@ -28,6 +28,7 @@ public class EnemyAI : MonoBehaviour
     public float viewDistance = 15f;
     public float viewAngle = 90f;
 
+
     [Header("Combat")]
     public float attackRange = 10f;
     public float damage = 10f;
@@ -35,6 +36,10 @@ public class EnemyAI : MonoBehaviour
     public int enemyCurrentAmmo = 30;
     public int enemyMagSize = 30;
     bool isReloading = false;
+    [Header("Shell Ejection")]
+    public GameObject shellPrefab;    // Kovan modeli (Prefab)
+    public Transform shellEjectPoint; // Silahın yanındaki çıkış noktası
+    public float shellForce = 3f;     // Fırlatma hızı
     [Header("Movement Tweaks")]
     public float strafeSpeed = 3f;
     float strafeTimer;
@@ -87,12 +92,27 @@ public class EnemyAI : MonoBehaviour
     }
 
     void Update()
-    {   if (anim != null){
-        // Ajanın o anki hızını al (0 duruyor, 3.5 koşuyor gibi)
+    {  if (anim != null)
+    {
         float currentSpeed = agent.velocity.magnitude;
-        // Bu hızı animatördeki "Speed" parametresine gönder
         anim.SetFloat("Speed", currentSpeed);
-        }
+        
+        if (currentState == EnemyState.Chase) agent.speed = 5.5f;
+        else agent.speed = 2.0f;
+    }
+
+    // --- BAKIŞ MANTIĞI (TEK BLOK OLMALI) ---
+    if (isBursting)
+    {
+        // Ateş ediyorsa her zaman oyuncuya bak
+        FaceTarget(player.position);
+    }
+    else if (agent.velocity.sqrMagnitude > 0.1f)
+    {
+        // Ateş etmiyor ama hareket ediyorsa gittiği yöne bak
+        Quaternion lookRotation = Quaternion.LookRotation(agent.velocity.normalized);
+        transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 10f);
+    }
         switch (currentState)
         {
             case EnemyState.Idle:
@@ -171,6 +191,7 @@ IEnumerator PatrolWait()
     void HandleChase()
 {
     // --- STRAFE (ZİKZAK) ZAMANLAYICI KONTROLÜ ---
+    if (anim != null) anim.SetBool("IsCrouching", false);
     strafeTimer -= Time.deltaTime;
     if (strafeTimer <= 0)
     {
@@ -297,11 +318,19 @@ IEnumerator PatrolWait()
 {
     if (!agent.pathPending && agent.remainingDistance < 0.5f)
     {
-        // Sipere vardığında oyuncuya bak
-        Vector3 direction = (player.position - transform.position).normalized;
-        direction.y = 0; 
-        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(direction), Time.deltaTime * 5f);
+        // SİPERDEYKEN OYUNCUYA BAKMA KODU (Sabitlendi)
+        Vector3 targetDir = player.position - transform.position;
+        targetDir.y = 0; // Yukarı-aşağı bakmasın, sadece yatayda dönsün
+        
+        if (targetDir != Vector3.zero)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(targetDir);
+            // Robotu anında değil, yumuşakça oyuncuya çevir
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 5f);
+        }
 
+        // Çömelme animasyonunu tetikle
+        if (anim != null) anim.SetBool("IsCrouching", true);
         // Siperdeyken de ateş etmeye çalış!
         if (CanSeePlayer())
         {
@@ -426,21 +455,46 @@ IEnumerator BurstFireAtPosition(int shots, Vector3 targetPos)
     isBursting = false;
     nextFireTime = Time.time + burstCooldown;
 }
-    IEnumerator BurstFire(int shots)
+IEnumerator BurstFire(int shots)
+{
+    isBursting = true;
+    
+    // Ateş etmeye başladığında NavMeshAgent'ı durdur (Kaymayı engeller)
+    if (agent != null) 
     {
-        isBursting = true;
-
-        while (shots > 0)
-        {
-            FireSingleShot(player.position);
-            if(muzzleFlashLight != null) StartCoroutine(FlashEffect()); // Işığı yak
-            shots--;
-            yield return new WaitForSeconds(burstDelay);
-        }
-
-        isBursting = false;
-        nextFireTime = Time.time + burstCooldown;
+        agent.isStopped = true;
+        agent.velocity = Vector3.zero; // Mevcut ivmeyi de sıfırla ki küt diye dursun
     }
+
+    while (shots > 0)
+    {
+        // Her mermiden önce yüzünü oyuncuya döndür
+        FaceTarget(player.position); 
+        
+        // Mermiyi fırlat
+        FireSingleShot(player.position);
+        
+        // Efekti oynat
+        if(muzzleFlashLight != null) StartCoroutine(FlashEffect());
+        
+        shots--;
+        
+        // Mermiler arası bekleme
+        yield return new WaitForSeconds(burstDelay);
+    }
+
+    // Ateş etme bitti
+    isBursting = false;
+    
+    // Ajanı tekrar serbest bırak (Yürümeye devam etsinler)
+    if (agent != null) 
+    {
+        agent.isStopped = false;
+    }
+
+    // Bir sonraki burst için bekleme süresi
+    nextFireTime = Time.time + burstCooldown;
+}
     IEnumerator FlashEffect()
     {
     muzzleFlashLight.enabled = true;
@@ -477,6 +531,7 @@ IEnumerator BurstFireAtPosition(int shots, Vector3 targetPos)
     if (isReloading) return;
 
     enemyCurrentAmmo--;
+    EjectShell();
     
     if (enemyCurrentAmmo <= 0)
     {
@@ -548,5 +603,39 @@ public void AlertFromFriend(Vector3 targetPos)
     Debug.Log(gameObject.name + ": Arkadaşım uyardı, yardıma gidiyorum!");
     lastSeenPosition = targetPos;
     currentState = EnemyState.Chase; // Doğrudan kovalama moduna geçebilir veya Search yapabilirsin
+}
+    void EjectShell()
+    {
+        if (shellPrefab != null && shellEjectPoint != null)
+        {
+            // Kovanı oluştur
+            GameObject shell = Instantiate(shellPrefab, shellEjectPoint.position, shellEjectPoint.rotation);
+            
+            // Fizik uygula
+            Rigidbody rb = shell.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                // Sağa ve hafif yukarı fırlat
+                Vector3 forceDir = shellEjectPoint.right * shellForce + shellEjectPoint.up * (shellForce * 0.2f);
+                rb.AddForce(forceDir, ForceMode.Impulse);
+                
+                // Rastgele döndür (havalı görünmesi için)
+                rb.AddTorque(Random.insideUnitSphere * 10f, ForceMode.Impulse);
+            }
+            
+            // Sahneyi kirletmemesi için 2 saniye sonra sil
+            Destroy(shell, 2f);
+        }
+    }
+    void FaceTarget(Vector3 targetPos)
+{
+    Vector3 direction = (targetPos - transform.position).normalized;
+    direction.y = 0; // Robotun öne/arkaya eğilmesini engelle
+    if (direction != Vector3.zero)
+    {
+        Quaternion lookRotation = Quaternion.LookRotation(direction);
+        // Anında değil, çok hızlı bir şekilde (20f) hedefe dön
+        transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 20f);
+    }
 }
 }
