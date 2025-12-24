@@ -2980,10 +2980,6 @@ PrefabInstance:
       propertyPath: crosshair
       value: 
       objectReference: {fileID: 31246183}
-    - target: {fileID: 3073007966193192278, guid: c15421e00d16de844bb9ad62f47beafb, type: 3}
-      propertyPath: gravity
-      value: -19.62
-      objectReference: {fileID: 0}
     - target: {fileID: 6270274702050555906, guid: c15421e00d16de844bb9ad62f47beafb, type: 3}
       propertyPath: m_LocalPosition.x
       value: -26.93
