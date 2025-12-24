@@ -103,7 +103,17 @@ public class PlayerController : MonoBehaviour
         if(isgrounded)
         {
             // 1. Hedef hızı belirle (Shift'e basılıyorsa sprintSpeed, değilse moveSpeed)
-            float targetSpeed = Input.GetKey(KeyCode.LeftShift) ? sprintSpeed : moveSpeed;
+            float targetSpeed;
+            if(Input.GetKey(KeyCode.LeftShift) &&  (playerHealth.CurrentStamina > 0f))
+            {
+                targetSpeed = sprintSpeed;
+                playerHealth.CurrentStamina -= 5f * Time.deltaTime; // Staminayı azalt
+            }
+            else
+            {
+                targetSpeed = moveSpeed;
+                playerHealth.CurrentStamina += 5f * Time.deltaTime; // Staminayı arttır
+            }
 
             // 2. Mevcut hızı (currentSpeed), hedef hıza (targetSpeed) Lerp ile yaklaştır
             // Buradaki '10f' değeri hızlanma/yavaşlanma ivmesidir, isteğine göre değiştirebilirsin.

@@ -12,7 +12,7 @@ public class PlayerHealth : MonoBehaviour
     private Vector3 initialCenterPos;
 
     [Header("Stamina Settings")]
-    public float maxStamina = 100f;
+    public float maxStamina = 20f;
     private float currentStamina;
     public float staminaRegenRate = 5f; // Stamina yenilenme h
     public float CurrentStamina
