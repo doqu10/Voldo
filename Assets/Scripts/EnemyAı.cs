@@ -4,7 +4,7 @@ using System.Collections;
 
 public class EnemyAI : MonoBehaviour
 {
-    int currentStrafeValue = 0;
+    float currentStrafeValue = 0f;
     public string GetCurrentState() { return currentState.ToString(); }
     public GameObject trailPrefab;
     public Transform enemyFirePoint;
@@ -17,11 +17,13 @@ public class EnemyAI : MonoBehaviour
     NavMeshAgent agent;
     Vector3 startPosition;
     Vector3 lastSeenPosition;
-
+    private float lastAlertTime; // En son ne zaman arkadaşları uyardı?
+    public float alertCooldown = 3f;
     float searchTimer;
     float nextFireTime;
     private Animator anim;
-
+    float alertRadius;
+    Collider[] friends;
     bool isBursting;
 
     [Header("Vision")]
@@ -92,52 +94,72 @@ public class EnemyAI : MonoBehaviour
     }
 
     void Update()
-    {  if (anim != null)
+{
+    if (anim != null)
     {
+        // Hareket hızını animatöre gönderiyoruz
         float currentSpeed = agent.velocity.magnitude;
         anim.SetFloat("Speed", currentSpeed);
         
-        if (currentState == EnemyState.Chase) agent.speed = 5.5f;
-        else agent.speed = 2.0f;
-    }
+        // Blend Tree için sağ/sol değerini gönderiyoruz
+        anim.SetFloat("StrafeDire", currentStrafeValue); 
 
-    // --- BAKIŞ MANTIĞI (TEK BLOK OLMALI) ---
-    if (isBursting)
-    {
-        // Ateş ediyorsa her zaman oyuncuya bak
-        FaceTarget(player.position);
-    }
-    else if (agent.velocity.sqrMagnitude > 0.1f)
-    {
-        // Ateş etmiyor ama hareket ediyorsa gittiği yöne bak
-        Quaternion lookRotation = Quaternion.LookRotation(agent.velocity.normalized);
-        transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 10f);
-    }
-        switch (currentState)
+        // Duruma göre hız ayarı
+       if (currentState == EnemyState.Chase) 
         {
-            case EnemyState.Idle:
-                HandleIdle();
-                break;
-
-            case EnemyState.Chase:
-                HandleChase();
-                break;
-
-            case EnemyState.Search:
-                HandleSearch();
-                break;
-
-            case EnemyState.Return:
-                HandleReturn();
-                break;
-            case EnemyState.TakeCover:
-                HandleTakeCover();
-                break;
-            case EnemyState.SuppressiveFire:
-                HandleSuppressiveFire();
-                break;
+            // Oyuncu uzaksa koş, yakındaysa (Ateş menzilinde) yavaşla/strafe yap
+            float distance = Vector3.Distance(transform.position, player.position);
+            if (distance > attackRange + 2f) 
+            {
+                agent.speed = 5.5f; // Koşma hızı (Run_guard_AR devreye girer)
+            }
+            else 
+            {
+                agent.speed = 3.5f; // Çatışma/Yürüme hızı
+            }
+        }
+        else 
+        {
+            agent.speed = 2.0f; // Devriye/Dönüş hızı
         }
     }
+
+    // --- BAKIŞ VE ROTASYON KONTROLÜ ---
+    // Eğer ateş ediyorsa veya kovalarken saldırı menzilindeyse oyuncuya kilitlen
+    if (isBursting || (currentState == EnemyState.Chase && agent.remainingDistance <= attackRange))
+    {
+        agent.updateRotation = false; // NavMesh'in otomatik dönmesini kapat
+        FaceTarget(player.position);  // Kod ile oyuncuya döndür
+    }
+    else
+    {
+        // Diğer durumlarda (devriye, arama vb.) NavMesh kendi dönebilir
+        agent.updateRotation = true; 
+        
+        // Eğer hareket ediyorsa Strafe değerini sıfırla ki düz yürüsün
+        if (agent.velocity.magnitude > 0.1f && !isBursting)
+        {
+             currentStrafeValue = Mathf.Lerp(currentStrafeValue, 0, Time.deltaTime * 5f);
+        }
+    }
+
+    // Eklenecek Durum Kontrolü: Siperdeyken hızı sıfırla
+    if (currentState == EnemyState.TakeCover && agent.remainingDistance < 0.5f)
+    {
+        anim.SetFloat("Speed", 0);
+    }
+
+    // State Makinesi
+    switch (currentState)
+    {
+        case EnemyState.Idle: HandleIdle(); break;
+        case EnemyState.Chase: HandleChase(); break;
+        case EnemyState.Search: HandleSearch(); break;
+        case EnemyState.Return: HandleReturn(); break;
+        case EnemyState.TakeCover: HandleTakeCover(); break;
+        case EnemyState.SuppressiveFire: HandleSuppressiveFire(); break;
+    }
+}
     
     public void OnDamagedByPlayer()
     {
@@ -190,29 +212,8 @@ IEnumerator PatrolWait()
 
     void HandleChase()
 {
-    // --- STRAFE (ZİKZAK) ZAMANLAYICI KONTROLÜ ---
+    // Chase başladığında çömelmeyi kapat
     if (anim != null) anim.SetBool("IsCrouching", false);
-    strafeTimer -= Time.deltaTime;
-    if (strafeTimer <= 0)
-    {
-        // currentStrafeValue sınıfın başında tanımladığımız değişken (-1, 0, 1)
-        currentStrafeValue = Random.Range(-1, 2); 
-        
-        // Rastgele bir süre boyunca (1.5 - 3 sn) seçilen yöne kayacak
-        strafeTimer = Random.Range(1.5f, 3.0f); 
-        
-        // Yön hesaplama: Sağ, Sol veya Düz
-        if (currentStrafeValue != 0) 
-            strafeDirection = (currentStrafeValue == -1) ? -transform.right : transform.right;
-        else
-            strafeDirection = Vector3.zero;
-    }
-
-    // Animator Blend Tree parametresini güncelle (StrafeDirection parametresi)
-    if (anim != null) 
-    {
-        anim.SetFloat("StrafeDirection", currentStrafeValue);
-    }
 
     // --- GRUP HABERLEŞMESİ (Alarm Sistemi) ---
     float alertRadius = 15f; 
@@ -220,10 +221,24 @@ IEnumerator PatrolWait()
     foreach (var f in friends)
     {
         EnemyAI friendAI = f.GetComponent<EnemyAI>();
-        if (friendAI != null && friendAI != this)
+      if (Time.time > lastAlertTime + alertCooldown)
+    {
+    // Baştaki 'float' ve 'Collider[]' gibi ifadeleri kaldırdık, sadece isimlerini kullanıyoruz
+    alertRadius = 15f; 
+    friends = Physics.OverlapSphere(transform.position, alertRadius);
+    
+    foreach (var friendCollider in friends) // 'f' yerine 'friendCollider' diyerek çakışmayı önledik
+    {
+        EnemyAI currentFriend = friendCollider.GetComponent<EnemyAI>(); // 'friendAI' yerine 'currentFriend'
+        
+        if (currentFriend != null && currentFriend != this && 
+           (currentFriend.currentState == EnemyState.Idle || currentFriend.currentState == EnemyState.Search))
         {
-            friendAI.AlertFromFriend(player.position);
+            currentFriend.AlertFromFriend(player.position);
         }
+    }
+    lastAlertTime = Time.time; 
+    }
     }
 
     // --- HAREKET VE SALDIRI MANTIĞI ---
@@ -232,28 +247,62 @@ IEnumerator PatrolWait()
     if (CanSeePlayer())
     {
         lastSeenPosition = player.position;
+        if (CanSeePlayer())
+    {
+        lastSeenPosition = player.position;
 
+        // KOŞMA MI YÜRÜME Mİ?
+        if (distance > attackRange + 3f) 
+        {
+            agent.speed = 6.5f; // Hızı biraz daha artırdık ki Run_guard_AR devreye girsin
+        }
+        else 
+        {
+            agent.speed = 3.5f; // Ateş ederken sakinleş (Yürüme/Strafe hızı)
+        }
+        }
         if (distance <= attackRange)
         {
-            // Oyuncuya çok yakınsa zikzak yaparak (Strafe) hareket et
-            agent.SetDestination(transform.position + strafeDirection * 2f);
-            
-            // Oyuncuya bakmasını sağla (NavMesh bazen yan dönebilir strafe yaparken)
-            Vector3 lookPos = player.position - transform.position;
-            lookPos.y = 0;
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookPos), Time.deltaTime * 5f);
-            
-            TryShoot(); // Ateş et
+            // --- STRAFE (YAN HAREKET) HESAPLAMA ---
+            strafeTimer -= Time.deltaTime;
+            if (strafeTimer <= 0)
+            {
+                currentStrafeValue = Random.Range(-1, 2); // -1: Sol, 0: Düz, 1: Sağ
+                strafeTimer = Random.Range(1.5f, 3.0f);
+            }
+
+            // Robotun sana bakmasını zorla ve NavMesh'in kendi dönmesini engelle
+            agent.updateRotation = false; 
+            FaceTarget(player.position);
+
+            // Yanlara doğru bir hedef nokta belirle
+            Vector3 sideDirection = transform.right * currentStrafeValue;
+            Vector3 movePos = transform.position + sideDirection * 2f;
+            agent.SetDestination(movePos);
+
+            // Animatöre değerleri gönder (Blend Tree burada çalışır)
+            if (anim != null)
+            {
+                anim.SetFloat("StrafeDire", currentStrafeValue);
+                anim.SetFloat("Speed", agent.velocity.magnitude);
+            }
+
+            TryShoot();
         }
         else
         {
             // Menzil dışındaysa doğrudan oyuncuya koş
+            agent.updateRotation = true; // Koşarken önüne baksın
+            currentStrafeValue = 0;
             agent.SetDestination(player.position);
+            
+            if (anim != null) anim.SetFloat("StrafeDire", 0);
         }
     }
     else
     {
-        // Oyuncu görüşten çıktıysa Baskı Ateşi moduna geç
+        // Oyuncu görüşten çıktıysa
+        agent.updateRotation = true;
         suppressiveTimer = suppressiveFireDuration;
         currentState = EnemyState.SuppressiveFire;
     }
@@ -527,6 +576,11 @@ IEnumerator BurstFire(int shots)
     if (anim != null) 
     {
         anim.SetTrigger("Shoot"); 
+    }if (anim != null) 
+    {
+        // Önceki tetikleyiciyi temizle ki yeni gelen emri taze taze alsın
+        anim.ResetTrigger("Shoot"); 
+        anim.SetTrigger("Shoot"); 
     }
     if (isReloading) return;
 
@@ -597,12 +651,14 @@ IEnumerator BurstFire(int shots)
 }
 public void AlertFromFriend(Vector3 targetPos)
 {
-    // Eğer zaten kovalıyorsa veya siper alıyorsa kafasını karıştırma
-    if (currentState == EnemyState.Chase || currentState == EnemyState.TakeCover) return;
+    if (currentState != EnemyState.Chase)
+    {
+        currentState = EnemyState.Search;
+        lastSeenPosition = targetPos;
+        agent.SetDestination(lastSeenPosition);
+        agent.speed = 6.0f; // Sese giderken de koşsun!
+    }
 
-    Debug.Log(gameObject.name + ": Arkadaşım uyardı, yardıma gidiyorum!");
-    lastSeenPosition = targetPos;
-    currentState = EnemyState.Chase; // Doğrudan kovalama moduna geçebilir veya Search yapabilirsin
 }
     void EjectShell()
     {
