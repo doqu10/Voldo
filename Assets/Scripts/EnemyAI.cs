@@ -35,7 +35,11 @@ public class EnemyAI : MonoBehaviour
             SetState(EnemyState.Dead);
             return;
         }
-
+        if (healthPercent <= coverHealthThreshold)
+        {
+            SetState(EnemyState.TakeCover);
+            return;
+        }
         if (perception != null && perception.CanSeePlayer())
         {
             float dist = Vector3.Distance(transform.position, player.position);
@@ -54,11 +58,7 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        if (healthPercent <= coverHealthThreshold)
-        {
-            SetState(EnemyState.TakeCover);
-            return;
-        }
+    
 
        SetState(EnemyState.Patrol);
     }

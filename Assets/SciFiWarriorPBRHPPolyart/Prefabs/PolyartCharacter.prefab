@@ -967,6 +967,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 7072444061591351740}
   - {fileID: 7072444061591351682}
   - {fileID: 7072444061591351806}
   - {fileID: 7072444061591351772}
@@ -1336,12 +1337,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7072444061591711132}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -118.131454, y: -98.01, z: -57.969975}
-  m_LocalScale: {x: 0.01, y: 0.01, z: 0.01}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 7072444061591351794}
+  m_Father: {fileID: 7072444061591351724}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!137 &7072444061578043538
 SkinnedMeshRenderer:
@@ -1813,7 +1814,6 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 7072444061591351728}
-  - {fileID: 7072444061591351740}
   - {fileID: 7072444061591351712}
   - {fileID: 7072444061591351714}
   - {fileID: 7072444061591351696}
@@ -1838,7 +1838,16 @@ Animator:
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_AnimatePhysics: 0
-  m_WarningMessage: 
+  m_WarningMessage: "\nBinding warning: Some generic clip(s) animate transforms that
+    are already bound by a Humanoid avatar. These transforms can only be changed
+    by Humanoid clips.\n\tTransform 'Headgear_Right'\n\tTransform 'Headgear_Left'\n\tTransform
+    'Headgear_Right'\n\tTransform 'Headgear_Left'\n\tTransform 'Headgear_Right'\n\tTransform
+    'Headgear_Left'\n\tFrom animation clip 'Idle_Guard_AR'\n\tFrom animation clip
+    'Idle_gunMiddle_AR'\n\tFrom animation clip 'Idle_Shoot_Ar'\n\tFrom animation
+    clip 'Die'\n\tFrom animation clip 'Idle_Ducking_AR'\n\tFrom animation clip 'Jump'\n\tFrom
+    animation clip 'Reload'\n\tFrom animation clip 'Run_guard_AR'\n\tFrom animation
+    clip 'Shoot_SingleShot_AR'\n\tFrom animation clip 'Shoot_BurstShot_AR'\n\tand
+    more ..."
   m_HasTransformHierarchy: 1
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
